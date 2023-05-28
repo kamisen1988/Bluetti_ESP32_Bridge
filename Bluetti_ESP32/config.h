@@ -3,13 +3,6 @@
 #include "Arduino.h"
 
 #define DEBUG                 1
-// Display config section, comment DISPLAYSSD1306 to disable display
-//#define DEBUGDISP 1
-//#define DISPLAYSSD1306  1
-#define DISPLAY_SCL_PORT 4
-#define DISPLAY_SDA_PORT 5
-//Uncomment to toggle display reset on start, required for displays like LoRa TTGO v1.0
-//#define DISPLAY_RST_PORT 16
 
 //#define RESET_WIFI_SETTINGS   
 
@@ -20,7 +13,7 @@
 
 #define BLUETOOTH_QUERY_MESSAGE_DELAY 3000
 
-#define RELAISMODE 1
+// #define RELAISMODE 1
 #define RELAIS_PIN 22
 #define RELAIS_LOW LOW
 #define RELAIS_HIGH HIGH

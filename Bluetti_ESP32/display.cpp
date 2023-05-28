@@ -1,9 +1,15 @@
 #include <arduino.h>
 #include <Wire.h>
-#include <Adafruit_GFX.h>
-#include <Adafruit_SSD1306.h>
 #include <display.h>
 #include <config.h>
+#include <SPI.h>
+#include <Ucglib.h>
+
+// Comments out when required software-based SPI.
+#define LCD_SPI_HW
+
+// (Optional, drive with LED)
+#define WITH_LED
 
 // used for millis loops
 const unsigned long flProgressBar = 200; // speed of update progressbar
@@ -32,41 +38,72 @@ byte prevBTStateIcons = 0;
 
 
 
-#define SCREEN_WIDTH 128
-#define SCREEN_HEIGHT 64
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
+// ESP-WROVER-KIT aasignment       LCD (ILI9341)
+#define LCD_RST   18   // RST  --> RESET
+#define LCD_SCLK  19   // SCLK --> SCL
+#define LCD_DC    21   // DC   --> D/C
+#define LCD_CS    22   // CS   --> CS
+#define LCD_MOSI  23   // MOSI --> SDA
+#define LCD_MISO  25   // MISO <-- SDO
+#define LCD_BL    5    // BL   --> LEDK
+
+#if defined(WITH_LED)
+#define LED_RED 0     // Onboard Red LED
+#define LED_GREEN 2   // Onboard Green LED
+#define LED_BLUE 4    // Onboard Blue LED
+#endif
+
+#if defined(LCD_SPI_HW)
+static Ucglib_ILI9341_18x240x320_HWSPI ucg(LCD_DC, LCD_CS, LCD_RST);
+#else
+static Ucglib_ILI9341_18x240x320_SWSPI ucg(LCD_SCLK, LCD_MOSI, LCD_DC, LCD_CS, LCD_RST);
+#endif
 
 void initDisplay()
 {
-    #if DISPLAY_RST_PORT
-        // Reset required for some displays like LoRa TTGO v1.0
-        pinMode(DISPLAY_RST_PORT, OUTPUT);
-        digitalWrite(DISPLAY_RST_PORT, HIGH);
-        delay(20);
-        digitalWrite(DISPLAY_RST_PORT, LOW);
-        delay(20);
-        digitalWrite(DISPLAY_RST_PORT, HIGH);
-        delay(20);
-    #endif
-    Wire.begin(DISPLAY_SDA_PORT, DISPLAY_SCL_PORT);
-    if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C, false, false))
-    {
-        Serial.println(F("display: SSD1306 allocation failed"));
-        for (;;)
-            ;
-    }
-    display.clearDisplay();
-    display.setTextSize(1); // Draw 2X-scale text
-    display.setTextColor(BLACK,WHITE);
-    display.setCursor(1, 1);
-    display.drawRect(0,0,73,10,WHITE);
-    display.println("BlueTTI Wifi");
+  delay(1000);
+
+#if defined(WITH_LED)
+  pinMode(LED_RED, OUTPUT);
+  pinMode(LED_GREEN, OUTPUT);
+  pinMode(LED_BLUE, OUTPUT);
+  digitalWrite(LED_RED, LOW);
+  digitalWrite(LED_GREEN, LOW);
+  digitalWrite(LED_BLUE, LOW);
+#endif
+
+  // Enable backlight.
+  pinMode(LCD_BL, OUTPUT);
+  digitalWrite(LCD_BL, LOW);
+
+#if defined(LCD_SPI_HW)
+  // Initialize hardware-based SPI, assigned using ESP32 VSPI.
+  SPI.begin(LCD_SCLK, LCD_MISO, LCD_MOSI, LCD_CS);
+#endif
+
+  // Initialize Ucglib
+  ucg.begin(UCG_FONT_MODE_TRANSPARENT);
+  ucg.clearScreen();
+  ucg.setRotate90();
+  ucg.setFont(ucg_font_8x13_tf);
+
+
+#if defined(WITH_LED)
+      digitalWrite(LED_RED, HIGH);
+      digitalWrite(LED_GREEN, LOW);
+      digitalWrite(LED_BLUE, LOW);
+#endif
+      ucg.setColor(255, 0, 0);
+      ucg.setPrintPos(50,50);
+      ucg.print("Hello World!");
+
     wrDisp_IP();
     wrDisp_Running();
     wrDisp_Status("Init....");
     btConnected = false;   
     byteWifiMode = 0;
 }
+
 void handleDisplay()
 {
     // progress bar
@@ -135,17 +172,19 @@ void handleDisplay()
 }
 void wrDisp_IP(String strIP)
 {
-    display.fillRect(0,14,114,8,0);
-    display.setTextColor(WHITE,BLACK);
-    display.setCursor(0, 14);
-    display.println("IP:"+ strIP);
-    display.display();
+    ucg.setColor(255, 255, 255);
+    ucg.drawBox(0,140,150,12);
+    ucg.setColor(0, 0, 255);
+    ucg.setPrintPos(0, 150);
+    ucg.print("IP:"+ strIP);
+    
 }
 void wrDisp_Running()
 {
-    display.fillRect(0,22,114,8,0);
-    display.setTextColor(WHITE,BLACK);
-    display.setCursor(0, 22);
+    ucg.setColor(0, 0, 0);
+    ucg.drawBox(0,100,150,12);
+    ucg.setColor(0, 255, 0);
+    ucg.setPrintPos(0, 110);
     // important: millis resets after 49days - currently not taken into account in the calculations
     // example output: 365d23h60m
     
@@ -164,64 +203,65 @@ void wrDisp_Running()
         hours = ((int)(((millis()/1000)/3600)-((days*24)))); 
         minutes = ((int)(((millis()/1000)-(hours*3600))/60));
     }
-    display.println("Runtime: "+ String(days)+"d"+String(hours)+"h"+String(minutes)+"m"); //running time will be max 49days until millis is reset
-    display.display();
+    ucg.print("Runtime: "+ String(days)+"d"+String(hours)+"h"+String(minutes)+"m"); //running time will be max 49days until millis is reset
+    
 }
 void wrDisp_Status(String strStatus)
 {
-    display.fillRect(0,30,114,8,0);
-    display.setTextColor(WHITE,BLACK);
-    display.setCursor(0, 30);
-    display.println("Status:" + strStatus);
-    display.display();
+    ucg.setColor(0, 0, 0);
+    ucg.drawBox(0,120,150,12);
+    ucg.setColor(0, 255, 0);
+    ucg.setPrintPos(0, 130);
+    ucg.print("Status:" + strStatus);    
 }
 void blueToothSignal(bool blConnected)
 {
-    display.fillRect(115, 18, 13, 13, 0);
-    display.display();
-    if (blConnected == true)
+    ucg.setColor(128, 128, 128);
+    ucg.drawBox(115, 18, 13, 13);
+    ucg.setColor(0, 0, 255);
+    
+        if (blConnected == true)
     {
-        display.writePixel(118, 21, 1);
-        display.writePixel(118, 27, 1);
-        display.writePixel(119, 22, 1);
-        display.writePixel(119, 26, 1);
-        display.writePixel(120, 25, 1);
-        display.writePixel(120, 23, 1);
-        display.drawLine(121, 19, 121, 29, 1);
-        display.writePixel(122, 19, 1);
-        display.writePixel(122, 24, 1);
-        display.writePixel(122, 29, 1);
-        display.writePixel(123, 20, 1);
-        display.writePixel(123, 23, 1);
-        display.writePixel(123, 25, 1);
-        display.writePixel(123, 28, 1);
-        display.writePixel(124, 21, 1);
-        display.writePixel(124, 22, 1);
-        display.writePixel(124, 26, 1);
-        display.writePixel(124, 27, 1);
-        display.display();
+        ucg.drawPixel(118, 21);
+        ucg.drawPixel(118, 27);
+        ucg.drawPixel(119, 22);
+        ucg.drawPixel(119, 26);
+        ucg.drawPixel(120, 25);
+        ucg.drawPixel(120, 23);
+        ucg.drawLine(121, 19, 121, 29);
+        ucg.drawPixel(122, 19);
+        ucg.drawPixel(122, 24);
+        ucg.drawPixel(122, 29);
+        ucg.drawPixel(123, 20);
+        ucg.drawPixel(123, 23);
+        ucg.drawPixel(123, 25);
+        ucg.drawPixel(123, 28);
+        ucg.drawPixel(124, 21);
+        ucg.drawPixel(124, 22);
+        ucg.drawPixel(124, 26);
+        ucg.drawPixel(124, 27);
+        
     }
     else
     {
-        display.writePixel(118, 21, prevBTStateIcons);
-        display.writePixel(118, 27, prevBTStateIcons);
-        display.writePixel(119, 22, prevBTStateIcons);
-        display.writePixel(119, 26, prevBTStateIcons);
-        display.writePixel(120, 25, prevBTStateIcons);
-        display.writePixel(120, 23, prevBTStateIcons);
-        display.drawLine(121, 19, 121, 29, prevBTStateIcons);
-        display.writePixel(122, 19, prevBTStateIcons);
-        display.writePixel(122, 24, prevBTStateIcons);
-        display.writePixel(122, 29, prevBTStateIcons);
-        display.writePixel(123, 20, prevBTStateIcons);
-        display.writePixel(123, 23, prevBTStateIcons);
-        display.writePixel(123, 25, prevBTStateIcons);
-        display.writePixel(123, 28, prevBTStateIcons);
-        display.writePixel(124, 21, prevBTStateIcons);
-        display.writePixel(124, 22, prevBTStateIcons);
-        display.writePixel(124, 26, prevBTStateIcons);
-        display.writePixel(124, 27, prevBTStateIcons);
-        display.display();
+        ucg.drawPixel(118, 21);
+        ucg.drawPixel(118, 27);
+        ucg.drawPixel(119, 22);
+        ucg.drawPixel(119, 26);
+        ucg.drawPixel(120, 25);
+        ucg.drawPixel(120, 23);
+        ucg.drawLine(121, 19, 121, 29);
+        ucg.drawPixel(122, 19);
+        ucg.drawPixel(122, 24);
+        ucg.drawPixel(122, 29);
+        ucg.drawPixel(123, 20);
+        ucg.drawPixel(123, 23);
+        ucg.drawPixel(123, 25);
+        ucg.drawPixel(123, 28);
+        ucg.drawPixel(124, 21);
+        ucg.drawPixel(124, 22);
+        ucg.drawPixel(124, 26);
+        ucg.drawPixel(124, 27);        
     }
 }
 void wifisignal(int intMode, int intSignal)
@@ -236,153 +276,155 @@ void wifisignal(int intMode, int intSignal)
     // -67 to -77: 2 bars
     // -78 to -88: 1 bar
     // -89 or lower: 0 bars -> not implemented
-    display.fillRect(115, 0, 13, 13, 0);
-    display.display();
+
+    ucg.setColor(128, 128, 128);
+    ucg.drawBox(115, 0, 13, 13);
+    
+    ucg.setColor(255, 255, 255);
     byte textColor = 1; // 1 for White and 0 for black
-    if (intMode == 1)
+        if (intMode == 1)
     {
         if (textColor == 0)
         {
             // Black on white
-            display.fillRect(115, 0, 13, 13, 1);
-            display.display();
+            //ucg.drawBox(115, 0, 13, 13);
+            
         } else
         {
             // White on black
-            display.fillRect(115, 0, 13, 13, 0);
+            //ucg.drawBox(115, 0, 13, 13);
             //display.drawRect(115, 0, 13, 13, 1);
-            display.display();
+            
 
         }
         if ((intSignal > -88) && (intSignal <= -78))
         {
             // extreme weak signal 1 bar
-            display.writePixel(121, 11, textColor);
+            ucg.drawPixel(121, 11);
         } else if ((intSignal > -77) && (intSignal <= -67))
         {
             // 2 bars
 
             // one bar
-            display.writePixel(121, 11, textColor);
+            ucg.drawPixel(121, 11);
             // 2 bar
-            display.writePixel(119, 9, textColor);
-            display.writePixel(123, 9, textColor);
-            display.writePixel(120, 8, textColor);
-            display.writePixel(121, 8, textColor);
-            display.writePixel(122, 8, textColor);
+            ucg.drawPixel(119, 9);
+            ucg.drawPixel(123, 9);
+            ucg.drawPixel(120, 8);
+            ucg.drawPixel(121, 8);
+            ucg.drawPixel(122, 8);
         }  else if ((intSignal > -66) && (intSignal <= -56))
         {
             // 3 bars
 
             // one bar
-            display.writePixel(121, 11, textColor);
+            ucg.drawPixel(121, 11);
             // 2 bar
-            display.writePixel(119, 9, textColor);
-            display.writePixel(123, 9, textColor);
-            display.writePixel(120, 8, textColor);
-            display.writePixel(121, 8, textColor);
-            display.writePixel(122, 8, textColor);
+            ucg.drawPixel(119, 9);
+            ucg.drawPixel(123, 9);
+            ucg.drawPixel(120, 8);
+            ucg.drawPixel(121, 8);
+            ucg.drawPixel(122, 8);
             // 3 bar
-            display.writePixel(118, 6, textColor);
-            display.writePixel(118, 6, textColor);
-            display.writePixel(124, 6, textColor);
-            display.writePixel(119, 5, textColor);
-            display.writePixel(120, 5, textColor);
-            display.writePixel(121, 5, textColor);
-            display.writePixel(122, 5, textColor);
-            display.writePixel(123, 5, textColor);
+            ucg.drawPixel(118, 6);
+            ucg.drawPixel(118, 6);
+            ucg.drawPixel(124, 6);
+            ucg.drawPixel(119, 5);
+            ucg.drawPixel(120, 5);
+            ucg.drawPixel(121, 5);
+            ucg.drawPixel(122, 5);
+            ucg.drawPixel(123, 5);
         }
         else if (intSignal > -55)
         {
             // 4 bars
 
             // one bar
-            display.writePixel(121, 11, textColor);
+            ucg.drawPixel(121, 11);
             // 2 bar
-            display.writePixel(119, 9, textColor);
-            display.writePixel(123, 9, textColor);
-            display.writePixel(120, 8, textColor);
-            display.writePixel(121, 8, textColor);
-            display.writePixel(122, 8, textColor);
+            ucg.drawPixel(119, 9);
+            ucg.drawPixel(123, 9);
+            ucg.drawPixel(120, 8);
+            ucg.drawPixel(121, 8);
+            ucg.drawPixel(122, 8);
             // 3 bar
-            display.writePixel(118, 6, textColor);
-            display.writePixel(118, 6, textColor);
-            display.writePixel(124, 6, textColor);
-            display.writePixel(119, 5, textColor);
-            display.writePixel(120, 5, textColor);
-            display.writePixel(121, 5, textColor);
-            display.writePixel(122, 5, textColor);
-            display.writePixel(123, 5, textColor);
+            ucg.drawPixel(118, 6);
+            ucg.drawPixel(118, 6);
+            ucg.drawPixel(124, 6);
+            ucg.drawPixel(119, 5);
+            ucg.drawPixel(120, 5);
+            ucg.drawPixel(121, 5);
+            ucg.drawPixel(122, 5);
+            ucg.drawPixel(123, 5);
             // 4 bar
-            display.writePixel(116, 4, textColor);
-            display.writePixel(126, 4, textColor);
-            display.writePixel(117, 3, textColor);
-            display.writePixel(125, 3, textColor);
-            display.writePixel(118, 2, textColor);
-            display.writePixel(119, 2, textColor);
-            display.writePixel(120, 2, textColor);
-            display.writePixel(121, 2, textColor);
-            display.writePixel(122, 2, textColor);
-            display.writePixel(123, 2, textColor);
-            display.writePixel(124, 2, textColor);
+            ucg.drawPixel(116, 4);
+            ucg.drawPixel(126, 4);
+            ucg.drawPixel(117, 3);
+            ucg.drawPixel(125, 3);
+            ucg.drawPixel(118, 2);
+            ucg.drawPixel(119, 2);
+            ucg.drawPixel(120, 2);
+            ucg.drawPixel(121, 2);
+            ucg.drawPixel(122, 2);
+            ucg.drawPixel(123, 2);
+            ucg.drawPixel(124, 2);
         }
-        display.display();   
+           
     }
     else if (intMode == 0)
     {
         
         if (prevStateIcons == 0)
         {
-            //display.fillRect(115, 0, 13, 13, 1);
+            ////ucg.drawBox(115, 0, 13, 13);
         }
         else
         {
-            //display.fillRect(115, 0, 13, 13, 0);
+            ////ucg.drawBox(115, 0, 13, 13);
         }
         // one bar
-        display.writePixel(121, 11, prevStateIcons);
+        ucg.drawPixel(121, 11);
         // 2 bar
-        display.writePixel(119, 9, prevStateIcons);
-        display.writePixel(123, 9, prevStateIcons);
-        display.writePixel(120, 8, prevStateIcons);
-        display.writePixel(121, 8, prevStateIcons);
-        display.writePixel(122, 8, prevStateIcons);
+        ucg.drawPixel(119, 9);
+        ucg.drawPixel(123, 9);
+        ucg.drawPixel(120, 8);
+        ucg.drawPixel(121, 8);
+        ucg.drawPixel(122, 8);
         // 3 bar
-        display.writePixel(118, 6, prevStateIcons);
-        display.writePixel(118, 6, prevStateIcons);
-        display.writePixel(124, 6, prevStateIcons);
-        display.writePixel(119, 5, prevStateIcons);
-        display.writePixel(120, 5, prevStateIcons);
-        display.writePixel(121, 5, prevStateIcons);
-        display.writePixel(122, 5, prevStateIcons);
-        display.writePixel(123, 5, prevStateIcons);
+        ucg.drawPixel(118, 6);
+        ucg.drawPixel(118, 6);
+        ucg.drawPixel(124, 6);
+        ucg.drawPixel(119, 5);
+        ucg.drawPixel(120, 5);
+        ucg.drawPixel(121, 5);
+        ucg.drawPixel(122, 5);
+        ucg.drawPixel(123, 5);
         // 4 bar
-        display.writePixel(116, 4, prevStateIcons);
-        display.writePixel(126, 4, prevStateIcons);
-        display.writePixel(117, 3, prevStateIcons);
-        display.writePixel(125, 3, prevStateIcons);
-        display.writePixel(118, 2, prevStateIcons);
-        display.writePixel(119, 2, prevStateIcons);
-        display.writePixel(120, 2, prevStateIcons);
-        display.writePixel(121, 2, prevStateIcons);
-        display.writePixel(122, 2, prevStateIcons);
-        display.writePixel(123, 2, prevStateIcons);
-        display.writePixel(124, 2, prevStateIcons);
+        ucg.drawPixel(116, 4);
+        ucg.drawPixel(126, 4);
+        ucg.drawPixel(117, 3);
+        ucg.drawPixel(125, 3);
+        ucg.drawPixel(118, 2);
+        ucg.drawPixel(119, 2);
+        ucg.drawPixel(120, 2);
+        ucg.drawPixel(121, 2);
+        ucg.drawPixel(122, 2);
+        ucg.drawPixel(123, 2);
+        ucg.drawPixel(124, 2);
         // not connected / trying to connect
         // wifi logo should blink, trying to make connection
-        display.display();
+        
     }
     else if (intMode == 2)
     {
         // AP mode
         // wifi logo should contain AP as text
-        display.fillRect(115, 0, 13, 13, 1);
-        display.setTextColor(BLACK, WHITE);
-        display.setCursor(116, 3);
-        display.print("AP");
-        display.display();
+        //ucg.drawBox(115, 0, 13, 13);
+        //display.setTextColor(BLACK, WHITE);
+        ucg.setPrintPos(116, 3);
+        ucg.print("AP");
+        
     }
-
 
 }
 void disp_setWifiSignal(int extWifMode, int extSignal)
@@ -424,8 +466,8 @@ void drawProgressbar(int x,int y, int width,int height, int progress)
 
    // clear old data
    //display.drawRect(x, y, width, height, BLACK);
-   display.fillRect(x, y, width , height, BLACK);
-   display.display();
+   //ucg.drawBox(x, y, width , height);
+   
    
    progress = progress > 100 ? 100 : progress;
    progress = progress < 0 ? 0 :progress;
@@ -433,6 +475,6 @@ void drawProgressbar(int x,int y, int width,int height, int progress)
    float bar = ((float)(width-1) / 100) * progress;
  
    //display.drawRect(x, y, width, height, WHITE);
-   display.fillRect(x, y, bar , height, WHITE);
-   display.display();
+   //ucg.drawBox(x, y, bar , height);
+   
 }

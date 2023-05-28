@@ -99,11 +99,9 @@ void initBWifi(bool resetWifi){
 		Serial.printf("Entered config mode:ip=%s, ssid='%s'\n", 
                         WiFi.softAPIP().toString().c_str(), 
                         wifiManager->getConfigPortalSSID().c_str());
-                        #ifdef DISPLAYSSD1306
-                          wifisignal(2); //AP mode
-                          wrDisp_IP(WiFi.softAPIP().toString().c_str());
-                          wrDisp_Status("Setup Wifi");
-                        #endif
+                        wifisignal(2); //AP mode
+                        wrDisp_IP(WiFi.softAPIP().toString().c_str());
+                        wrDisp_Status("Setup Wifi");
 	});
   
   if (!wifiManager.autoConnect("Bluetti_ESP32")) {
@@ -124,18 +122,12 @@ void initBWifi(bool resetWifi){
   // Wait for connection
   while (WiFi.status() != WL_CONNECTED) {
     // display will have blinking wifi signal until connected.
-    #ifdef DISPLAYSSD1306
-      disp_setPrevStateIcon(0);
-      wifisignal(0);
-      delay(200);
-      Serial.print(".");
-      disp_setPrevStateIcon(1);
-      wifisignal(0);
-    #else
-      delay(500);
-      Serial.print(".");
-    #endif
-
+    disp_setPrevStateIcon(0);
+    wifisignal(0);
+    delay(200);
+    Serial.print(".");
+    disp_setPrevStateIcon(1);
+    wifisignal(0);
   }
   
   WiFi.setAutoReconnect(true);
@@ -143,10 +135,8 @@ void initBWifi(bool resetWifi){
   Serial.println(F(""));
   Serial.println(F("IP address: "));
   Serial.println(WiFi.localIP());
-  #ifdef DISPLAYSSD1306
-    wrDisp_IP(WiFi.localIP().toString().c_str());
-    disp_setWifiSignal(1, WiFi.RSSI());
-  #endif
+  wrDisp_IP(WiFi.localIP().toString().c_str());
+  disp_setWifiSignal(1, WiFi.RSSI());
   if (MDNS.begin(DEVICE_NAME)) {
     Serial.println(F("MDNS responder started"));
   }
@@ -215,11 +205,8 @@ void handleWebserver() {
   }
 
   if ((millis() - lastTimeWebUpdate) > MSG_VIEWER_REFRESH_CYCLE*1000) {
-
-    #ifdef DISPLAYSSD1306
-      // update display
-      disp_setWifiSignal(1,WiFi.RSSI());
-    #endif
+    // update display
+    disp_setWifiSignal(1,WiFi.RSSI());
 
     // Send Events to the Web Server with current data
     events.send("ping",NULL,millis());
